@@ -1,0 +1,93 @@
+﻿@page "/"
+@using System.Globalization
+@using Microsoft.Maui.Media
+@using System.Diagnostics
+
+<PageTitle>Settings</PageTitle>
+
+<div>
+    <select value="@selectedCulture" @onchange="@OnLanguageChanged" class="form-control">
+        <option value="" disabled>Select Language</option>
+       
+        @foreach (var culture in cultures)
+        {
+            <option value="@culture">@culture</option>
+        }
+    </select>
+
+    <select value="@selectedVoice" @onchange="@OnVoiceChanged" class="form-control">
+        <option value="" disabled>Select Voice</option>
+        @foreach (var voice in languageVoices)
+        {
+            <option value="@voice.Name">@voice.Name</option>
+        }
+    </select>
+
+    <button @onclick="PlayText" class="btn btn-primary" style="width: 100%;">Play</button>
+</div>
+
+@code {
+    private string selectedLanguage;
+    private string selectedCulture;
+    private string selectedVoice;
+    private List<Locale> languages = new();
+    private List<Locale> voices = new();
+    private List<Locale> languageVoices = new();
+    private List<string> cultures = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var locales = await TextToSpeech.Default.GetLocalesAsync();
+        languages = locales.GroupBy(locale => locale.Language).OrderBy(group => group.Key)
+                           .Select(group => new Locale { Language = group.Key, Name = group.First().Name }).ToList();
+        cultures = languages.OrderBy(l => l.Language).Select(l => new CultureInfo(l.Language).DisplayName).ToList();
+        voices = locales.Select(locale => new Locale { Name = locale.Name, Language = locale.Language }).ToList();
+        cultures.Sort();
+        selectedCulture = "English (United States)";
+    #if ANDROID
+        selectedCulture = "English";
+    #endif
+        selectedLanguage = languages.FirstOrDefault(code => new CultureInfo(code.Language).DisplayName == selectedCulture)?.Language ?? string.Empty;
+        await LoadVoicesForLanguage(selectedLanguage);
+    }
+
+    private async Task OnLanguageChanged(ChangeEventArgs e)
+    {
+        selectedLanguage = languages.FirstOrDefault(code => new CultureInfo(code.Language).DisplayName == e.Value.ToString())?.Language;
+        Debug.WriteLine(selectedLanguage);
+        await LoadVoicesForLanguage(selectedLanguage);
+    }
+    private async Task OnVoiceChanged(ChangeEventArgs e)
+    {
+        selectedVoice = e.Value.ToString();
+        Debug.WriteLine(selectedVoice);
+    }
+    
+    private async Task LoadVoicesForLanguage(string languageCode)
+    {
+        languageVoices = voices.Where(v => v.Language.StartsWith(languageCode)).OrderBy(v => v.Name).ToList();
+        selectedVoice = languageVoices.FirstOrDefault()?.Name ?? string.Empty;
+        var locales = await TextToSpeech.Default.GetLocalesAsync();
+        var selectedLocale = locales.FirstOrDefault(locale => locale.Language == selectedLanguage && locale.Name == selectedVoice);
+        Debug.WriteLine(selectedLocale?.Name + ":" + selectedLocale?.Language + ":" + selectedLocale?.Id);
+    }
+
+    private async Task PlayText()
+    {
+        var locales = await TextToSpeech.Default.GetLocalesAsync(); 
+        var selectedLocale = locales.FirstOrDefault(locale => locale.Language == selectedLanguage && locale.Name == selectedVoice); 
+        Debug.WriteLine(selectedLocale?.Name + ":" + selectedLocale?.Language + ":" + selectedLocale?.Id); 
+        if (selectedLocale == null) 
+        { Debug.WriteLine($"Selected voice {selectedVoice} not found for language {selectedLanguage}"); return; 
+        } 
+        var speechOptions = new SpeechOptions { 
+            Pitch = 1f, // 0.0 - 2.0 
+        Volume = 0.75f, // 0.0 - 1.0 
+        Locale = selectedLocale }; 
+        await TextToSpeech.Default.SpeakAsync($"Hello! I am {selectedVoice}. This is a Test! Ceci est un test! ¡Esto es una prueba! هذه تجربة!", speechOptions); 
+        } 
+        public class Locale { 
+            public string Name { get; set; } 
+            public string Language { get; set; } 
+        } 
+    }
